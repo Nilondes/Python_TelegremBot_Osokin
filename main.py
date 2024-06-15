@@ -35,6 +35,7 @@ def make_move(player, board, x, y):
 
 
 def check_win(player, board):
+    """Check win conditions"""
     for row in board:
         if row == [player, player, player]:  # Ищем совпадение по строкам
             return True
@@ -49,6 +50,7 @@ def check_win(player, board):
 
 
 def check_draw(board):
+    """Checks whether there is at least one empty spot"""
     for row in board:
         for cell in row:
             if cell == ' ':
@@ -64,7 +66,7 @@ def tic_tac_toe():
                       }
     player_key = -1
     while not check_win(current_player[player_key], the_board):
-        player_key *= -1
+        player_key *= -1  # Switch player
         the_board = ask_and_make_move(current_player[player_key], the_board)
         draw_board(the_board)
         if check_draw(the_board):
