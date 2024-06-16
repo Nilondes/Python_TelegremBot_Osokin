@@ -10,12 +10,14 @@ def build_note(note_text, note_name):
 
 
 def create_note():
+    """Asks user for file name and content"""
     note_name = input('Please, enter the name of your note: ').strip()
     note_text = input('Please, enter your note: ').strip()
     build_note(note_text, note_name)
 
 
 def file_exists(file_name):
+    """Checks file existence"""
     if not os.path.isfile(file_name):
         print('Cannot find note with this name')
         return False
@@ -23,6 +25,7 @@ def file_exists(file_name):
 
 
 def read_note():
+    """Reads file"""
     note_name = input('Please, enter the name of the note: ').strip()
     if file_exists(note_name):
         with open(note_name, 'r') as f:
@@ -30,6 +33,7 @@ def read_note():
 
 
 def edit_note():
+    """Read and edit file"""
     note_name = input('Please, enter the name of the note: ').strip()
     if file_exists(note_name):
         with open(note_name, 'r') as f:
@@ -41,6 +45,7 @@ def edit_note():
 
 
 def delete_note():
+    """Delete file"""
     note_name = input('Please, enter the name of the note: ').strip()
     if file_exists(note_name):
         os.remove(note_name)
