@@ -1,8 +1,13 @@
+from colorama import Fore, Style
+
+
 def draw_board(board):
+    # функция, определяющая цвет символа
+    colorize = lambda x: Fore.RED + x + Style.RESET_ALL if x == 'X' else Fore.GREEN + x + Style.RESET_ALL if x == 'O' else x
     # запустить цикл, который проходит по всем 3 строкам доски
     for i in range(3):
         # поставить разделители значений в строке
-        print(" | ".join(board[i]))
+        print(colorize(board[i][0]) + " | " + colorize(board[i][1]) + " | " + colorize(board[i][2]))
         # поставить разделители строк
         if i < 2:
             print("---------")
@@ -80,3 +85,6 @@ while True:
     answer = input('Чтобы сыграть ещё, напишите "Да"')
     if not answer.lower() == 'да':
         break
+
+
+
