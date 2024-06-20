@@ -67,6 +67,17 @@ def main():
         print('The command not found. Please, use one of available commands')
 
 
+def display_notes():
+    """Lists all .txt files sorted by size"""
+    txt_lst = list(filter(lambda x: x.endswith('.txt'),os.listdir()))
+    file_sizes = {}
+    for file in txt_lst:
+        file_sizes[file] = os.stat(file).st_size
+    files_sorted_by_size = sorted(file_sizes.items(), key=lambda item: item[1])
+    for file in files_sorted_by_size:
+        print(file[0])
+
+
 while True:
     main()
     answer = input('If you want to continue, print "Yes": ').strip().lower()
