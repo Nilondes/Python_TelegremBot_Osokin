@@ -1,4 +1,4 @@
-import telebot, datetime
+import telebot, datetime, logging
 from secrets import API_TOKEN, HOST, DATABASE, USER, PASSWORD
 import psycopg2
 
@@ -9,23 +9,28 @@ class Calendar:
         self.cursor = conn.cursor()
 
     def create_event(self, event_name, event_date, event_time, event_details, chat_id):
-        self.cursor.execute(f"""
-            INSERT INTO events (name, date, time, event_details, chat_id)
-            VALUES ('{event_name}', '{event_date}', '{event_time}', '{event_details}', '{chat_id}');
-            """)
-        self.conn.commit()
-        self.cursor.execute(f"""
-            SELECT id FROM events WHERE name = '{event_name}' and chat_id = '{chat_id}';
-            """)
-        res = self.cursor.fetchall()
-        event_id = res[0][0]
-        return event_id
+        try:
+            self.cursor.execute("""
+                INSERT INTO events (name, date, time, event_details, chat_id)
+                VALUES (%s, %s, %s, %s, %s);
+                """, (event_name, event_date, event_time, event_details, chat_id))
+            self.conn.commit()
+            self.cursor.execute("""
+                SELECT id FROM events WHERE name = %s and chat_id = %s;
+                """, (event_name, chat_id))
+            res = self.cursor.fetchall()
+            event_id = res[0][0]
+            logging.info(f"Event created with ID: {event_id}")
+            return event_id
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Error occurred: {e}")
 
     def read_event(self, event_id, chat_id):
         try:
-            self.cursor.execute(f"""
-                        SELECT * FROM events where id = '{event_id}' and chat_id = '{chat_id}';
-                        """)
+            self.cursor.execute("""
+                        SELECT * FROM events WHERE id = %s AND chat_id = %s;
+                        """, (event_id, chat_id))
             res = self.cursor.fetchall()
             res_dict = {
                 'id': res[0][0],
@@ -36,38 +41,49 @@ class Calendar:
                 'chat_id': res[0][5]
             }
             return res_dict
-        except:
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Error occurred: {e}")
             return False
 
     def delete_event(self, event_id, chat_id):
         res_dict = self.read_event(event_id, chat_id)
+        print(res_dict)
         if res_dict:
-            self.cursor.execute(f"""
-            DELETE FROM events WHERE id = '{event_id}' and chat_id = '{chat_id}';
-            """)
-            self.conn.commit()
-            return res_dict
+            try:
+                self.cursor.execute("""
+                DELETE FROM events WHERE id = %s and chat_id = %s;
+                """, (event_id, chat_id))
+                self.conn.commit()
+                logging.info(f"Event deleted with ID: {event_id}")
+                return res_dict
+            except Exception as e:
+                self.conn.rollback()
+                logging.error(f"Error occurred: {e}")
         return False
 
     def edit_event(self, event_id, event_name, event_date, event_time, event_details, chat_id):
         try:
-            self.cursor.execute(f"""
-                        UPDATE events SET name = '{event_name}',
-                        date = '{event_date}',
-                        time = '{event_time}',
-                        event_details = '{event_details}'
-                        WHERE id = '{event_id}' and chat_id = '{chat_id}';
-                        """)
+            self.cursor.execute("""
+                        UPDATE events SET name = %s,
+                        date = %s,
+                        time = %s,
+                        event_details = %s
+                        WHERE id = %s and chat_id = %s;
+                        """, (event_name, event_date, event_time, event_details, event_id, chat_id))
             self.conn.commit()
+            logging.info(f"Event edited with ID: {event_id}")
             return event_id
-        except:
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Error occurred: {e}")
             return False
 
     def display_events(self, chat_id):
         events = {}
-        self.cursor.execute(f"""
-        SELECT * FROM events WHERE chat_id = '{chat_id}';
-        """)
+        self.cursor.execute("""
+        SELECT * FROM events WHERE chat_id = %s;
+        """, (chat_id,))
         res = self.cursor.fetchall()
         for event in res:
             events.update({event[0]:
@@ -81,9 +97,9 @@ class Calendar:
         return events
 
     def check_user_name(self, chat_id):
-        self.cursor.execute(f"""
-        SELECT user_name FROM users WHERE chat_id = '{chat_id}';
-        """)
+        self.cursor.execute("""
+        SELECT user_name FROM users WHERE chat_id = %s;
+        """, (chat_id,))
         res = self.cursor.fetchall()
         if res:
             return res[0][0]
@@ -91,16 +107,22 @@ class Calendar:
             return False
 
     def create_user(self, chat_id, user_name):
-        if self.check_user_name(chat_id):
-            self.cursor.execute(f"""
-            UPDATE users SET user_name = '{user_name}' WHERE chat_id = '{chat_id}'
-            """)
-        else:
-            self.cursor.execute(f"""
-            INSERT INTO users (chat_id, user_name)
-            VALUES ('{chat_id}', '{user_name}');
-            """)
+        try:
+            if self.check_user_name(chat_id):
+                self.cursor.execute("""
+                UPDATE users SET user_name = %s WHERE chat_id = %s
+                """, (user_name, chat_id))
+                logging.info(f"User edited with ID: {chat_id}")
+            else:
+                self.cursor.execute(f"""
+                INSERT INTO users (chat_id, user_name)
+                VALUES (%s, %s);
+                """, (chat_id, user_name))
+                logging.info(f"User created with ID: {chat_id}")
             self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Error occurred: {e}")
 
 
 conn = psycopg2.connect(
@@ -130,7 +152,7 @@ def main(message):
             bot.register_next_step_handler(message, create_user)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 @bot.message_handler(commands=['register'])
@@ -140,7 +162,7 @@ def register_user(message):
         bot.register_next_step_handler(message, create_user)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def create_user(message):
@@ -154,7 +176,7 @@ def create_user(message):
             main(message)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 @bot.message_handler(commands=['create_event'])
@@ -166,7 +188,7 @@ def create_event_handler(message):
         bot.register_next_step_handler(message, create_event_name)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def create_event_name(message):
@@ -176,17 +198,18 @@ def create_event_name(message):
         bot.register_next_step_handler(message, create_event_date)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def create_event_date(message):
     try:
         event_date = datetime.datetime.strptime(message.text, '%Y-%m-%d').date()
     except ValueError as err:
-        bot.send_message(message.from_user.id, text='The date has unknown format')
+        bot.send_message(message.from_user.id, text='The date has unknown format '
+                                                    'Please, use YYYY-MM-DD.')
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
     else:
         sessions[message.chat.id].update({'date': str(event_date)})
         bot.send_message(message.from_user.id, text='Please, enter event time (use format hh:mm)')
@@ -197,10 +220,11 @@ def create_event_time(message):
     try:
         event_time = datetime.datetime.strptime(message.text, '%H:%M').time()
     except ValueError as err:
-        bot.send_message(message.from_user.id, text='The time has unknown format')
+        bot.send_message(message.from_user.id, text='The time has unknown format '
+                                                    'Please, use hh:mm')
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
     else:
         sessions[message.chat.id].update({'time': str(event_time)})
         bot.send_message(message.from_user.id, text='Please, enter event details')
@@ -219,7 +243,7 @@ def create_event_details(message):
         bot.send_message(message.from_user.id, text=f'The event {event_id} has been created!')
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 @bot.message_handler(commands=['read_event'])
@@ -231,7 +255,7 @@ def read_event_handler(message):
         bot.register_next_step_handler(message, read_event)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def read_event(message):
@@ -246,7 +270,7 @@ def read_event(message):
             bot.send_message(message.from_user.id, text='There is no event with this id')
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 @bot.message_handler(commands=['delete_event'])
@@ -258,7 +282,7 @@ def delete_event_handler(message):
         bot.register_next_step_handler(message, delete_event)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def delete_event(message):
@@ -270,7 +294,7 @@ def delete_event(message):
             bot.send_message(message.from_user.id, text='There is no event with this id')
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 @bot.message_handler(commands=['list_events'])
@@ -290,7 +314,7 @@ def list_events_handler(message):
                                                             f"{event['details']}")
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 @bot.message_handler(commands=['edit_event'])
@@ -302,7 +326,7 @@ def edit_event_handler(message):
         bot.register_next_step_handler(message, read_editable_event)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def read_editable_event(message):
@@ -321,7 +345,7 @@ def read_editable_event(message):
             bot.send_message(message.from_user.id, text='There is no event with this id')
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def define_editable_event_data(message):
@@ -334,7 +358,7 @@ def define_editable_event_data(message):
             bot.register_next_step_handler(message, edit_event)
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 def edit_event(message):
@@ -388,7 +412,7 @@ def edit_event(message):
             sessions[message.chat.id] = {}
     except Exception as e:
         bot.send_message(message.from_user.id, text='An error occurred')
-        print(f'Error occurred : {e}')
+        logging.error(f"Error occurred: {e}")
 
 
 bot.infinity_polling(none_stop=True, interval=1)
